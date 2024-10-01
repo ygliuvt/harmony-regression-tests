@@ -67,6 +67,10 @@ jobs:
       - name: Pull Docker image
         run: docker pull ghcr.io/nasa/regression-tests-variable-subsetter:${{ github.event.client_payload.docker-image-tag || 'latest' }}
 
+      - name: Debug Branch
+        run: |
+          echo "Branch received: ${{ github.event.client_payload.branch }}"
+
       - name: Set HARMONY_HOST_URL
         run: |
           if [ "${{ github.event.client_payload.harmony-environment }}" == "uat" ]; then

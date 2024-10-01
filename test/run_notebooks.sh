@@ -84,7 +84,7 @@ for name_comma_pid in "${PIDS[@]}"; do
     echo -e "${RED}Test suite ${name} failed with exit code ${code}${NC}" 1>&2;
     exit_code=1
   else
-    echo -e "${GREEN}Test suite ${name} succeeded${NC}"
+    echo -e "xxxxxxxxxxxx${GREEN}Test suite ${name} succeeded${NC}"
   fi
   docker rm ${pid} >/dev/null
 done
