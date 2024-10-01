@@ -27,6 +27,10 @@ on:
         required: false
         type: string
         default: 'latest'
+      branch:
+        required: false
+        type: string
+        default: 'main'
 
   repository_dispatch:
     types: [harmony-service-example]
@@ -42,6 +46,10 @@ on:
         required: false
         type: string
         default: 'latest'
+      branch:
+        required: false
+        type: string
+        default: 'main'
 
 jobs:
   variable_subsetter_job:
@@ -50,6 +58,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.client_payload.branch || 'main' }}  # Use the branch name from the dispatch event
 
       - name: Get the URL of the current workflow run
         run: echo "RUN_URL=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_ENV
@@ -60,7 +70,7 @@ jobs:
       - name: Set HARMONY_HOST_URL
         run: |
           if [ "${{ github.event.client_payload.harmony-environment }}" == "uat" ]; then
-            echo "HARMONY_HOST_URL=https://harmony.uat.earthdata.nasa.gov"
+            echo "xxxxxxxxxxxxxHARMONY_HOST_URL=https://harmony.uat.earthdata.nasa.gov"
             echo "HARMONY_HOST_URL=https://harmony.uat.earthdata.nasa.gov" >> $GITHUB_ENV
           elif [ "${{ github.event.client_payload.harmony-environment }}" == "prod" ]; then
             echo "HARMONY_HOST_URL=https://harmony.earthdata.nasa.gov"
