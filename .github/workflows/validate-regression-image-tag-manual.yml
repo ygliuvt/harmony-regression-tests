@@ -155,10 +155,9 @@ jobs:
             echo "Missing file not found: $MISSING_FILE" >&2
             exit 1
           fi
-          echo "::error::Validation failed for suite '${{ matrix.suite }}' in $HARMONY_ENVIRONMENT"
-          echo "Missing image tags:"
-          cat "$MISSING_FILE" || true
+          echo "Missing image tags: $MISSING_FILE"
           echo "Workflow run: $RUN_URL"
           echo "You can add the tag to the desired image version by running:"
           echo "  ./script/add-ghcr-tag.sh ghcr.io/${{ github.repository_owner }}/regression-tests-${{ matrix.suite }}:<version> ${{ steps.validate.outputs.computed_tag }}"
+          echo "::error::Validation failed for suite '${{ matrix.suite }}' in $HARMONY_ENVIRONMENT"
           exit 1
