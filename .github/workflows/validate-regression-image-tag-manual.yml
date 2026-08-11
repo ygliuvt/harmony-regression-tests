@@ -43,12 +43,30 @@ on:
           - variable-subsetter
 
 jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      suites: ${{ steps.get-suites.outputs.suites }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: get-suites
+        run: |
+          SELECTED="${{ github.event.inputs.test-suite }}"
+          if [ "$SELECTED" = "all" ]; then
+            WORKFLOW_FILE=".github/workflows/$(basename "${GITHUB_WORKFLOW_REF%%@*}")"
+            SUITES=$(yq e '.on.workflow_dispatch.inputs.test-suite.options | del(.[] | select(. == "all")) | tojson -c' "$WORKFLOW_FILE")
+            echo "suites=$SUITES" >> "$GITHUB_OUTPUT"
+          else
+            echo "suites=[\"$SELECTED\"]" >> "$GITHUB_OUTPUT"
+          fi
+
   validate:
+    needs: setup
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.harmony-environment }}
     strategy:
       matrix:
-        suite: ${{ github.event.inputs.test-suite == 'all' && fromJSON('["casper","geoloco","giovanni-averaging-service","giovanni-time-series-adapter","hga","harmony","harmony-flow","harmony-regression","hoss","hybig","imagenator","net2cog","nisar-py","nsidc-icesat2","nsidc-smap","opera-rtc-s1-browse","podaac-l2-subsetter","regridder","sambah","smap-l2-gridder","subset-band-name","swath-projector","trajectory-subsetter","variable-subsetter"]') || fromJSON(format('["{0}"]', github.event.inputs.test-suite)) }}
+        suite: ${{ fromJSON(needs.setup.outputs.suites) }}
 
     steps:
       - name: Checkout the repository
@@ -100,6 +118,8 @@ jobs:
           computed_tag="$(compute_regression_image_tag "$suite" "$harmony_host_url")"
           image="ghcr.io/${{ github.repository_owner }}/regression-tests-${suite}:${computed_tag}"
 
+          echo "computed_tag=$computed_tag" >> "$GITHUB_OUTPUT"
+
           missing_file="missing-tag-${{ github.event.inputs.harmony-environment }}-${suite}.txt"
           : > "$missing_file"
 
@@ -117,118 +137,28 @@ jobs:
           fi
 
       - name: Upload missing tag report
-        if: always() && steps.validate.outputs.has_missing == 'true'
+        if: steps.validate.outputs.has_missing == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: missing-regression-image-tag-${{ github.event.inputs.harmony-environment }}-${{ matrix.suite }}
           path: missing-tag-${{ github.event.inputs.harmony-environment }}-${{ matrix.suite }}.txt
 
-      - name: Send missing-tag email to service provider
+      - name: Log missing-tag status and fail step
         if: steps.validate.outputs.has_missing == 'true'
         env:
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
-          TO_EMAIL_DEFAULT: ${{ vars.TO_EMAIL_DEFAULT }}
-          SERVICES_EMAILS_CONFIG: ${{ vars.SERVICES_EMAILS_CONFIG }}
-          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          MISSING_FILE: missing-tag-${{ github.event.inputs.harmony-environment }}-${{ matrix.suite }}.txt
           HARMONY_ENVIRONMENT: ${{ github.event.inputs.harmony-environment }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          MISSING_FILE: missing-tag-${{ github.event.inputs.harmony-environment }}-${{ matrix.suite }}.txt
         run: |
           set -euo pipefail
-
-          python3 - <<'PY'
-          import json
-          import os
-          import smtplib
-          from email.message import EmailMessage
-
-          smtp_user = os.environ.get('SMTP_USER', '').strip()
-          smtp_password = os.environ.get('SMTP_PASSWORD', '').strip()
-          from_email = os.environ.get('FROM_EMAIL', '').strip()
-          to_email_default = os.environ.get('TO_EMAIL_DEFAULT', '').strip()
-          services_emails_config_raw = os.environ.get('SERVICES_EMAILS_CONFIG', '').strip()
-          repository_owner = os.environ.get('REPOSITORY_OWNER', '').strip()
-          harmony_environment = os.environ.get('HARMONY_ENVIRONMENT', '').strip()
-          run_url = os.environ.get('RUN_URL', '').strip()
-          missing_file = os.environ.get('MISSING_FILE', '').strip()
-
-          if not smtp_user or not smtp_password or not from_email:
-            raise SystemExit('SMTP_USER, SMTP_PASSWORD, and FROM_EMAIL must be set')
-          if not missing_file or not os.path.exists(missing_file):
-            raise SystemExit(f'Missing file not found: {missing_file}')
-
-          try:
-            services_emails_config = json.loads(services_emails_config_raw) if services_emails_config_raw else {}
-          except json.JSONDecodeError as exc:
-            raise SystemExit(f'SERVICES_EMAILS_CONFIG is not valid JSON: {exc}')
-
-          def normalize_recipients(raw_value):
-            if isinstance(raw_value, list):
-              candidates = raw_value
-            else:
-              candidates = str(raw_value or '').split(',')
-            unique = []
-            seen = set()
-            for item in candidates:
-              email = str(item).strip().lower()
-              if email and email not in seen:
-                unique.append(email)
-                seen.add(email)
-            return unique
-
-          sent_count = 0
-          with open(missing_file, 'r', encoding='utf-8') as handle:
-            lines = [line.strip() for line in handle if line.strip()]
-
-          if not lines:
-            print('No missing-tag lines found; no emails sent')
-            raise SystemExit(0)
-
-          with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-            smtp.login(smtp_user, smtp_password)
-
-            for line in lines:
-              suite, separator, computed_tag = line.partition(':')
-              suite = suite.strip()
-              computed_tag = computed_tag.strip()
-              if not suite or not separator or not computed_tag:
-                print(f'Skipping malformed missing-tag line: {line}')
-                continue
-
-              recipients = normalize_recipients(services_emails_config.get(suite, ''))
-              if not recipients and to_email_default:
-                recipients = normalize_recipients(to_email_default)
-              if not recipients:
-                print(f'No recipients available for suite {suite}; skipping email')
-                continue
-
-              image = f'ghcr.io/{repository_owner}/regression-tests-{suite}:{computed_tag}'
-
-              msg = EmailMessage()
-              msg['From'] = from_email
-              msg['To'] = ', '.join(recipients)
-              msg['Subject'] = f"Missing regression image tag [{harmony_environment}] {suite}"
-              msg.set_content(
-                f"A required regression image tag is missing for suite '{suite}' in {harmony_environment}.\n\n"
-                f"Missing image tag:\n"
-                f"- {image}\n\n"
-                f"Environment: {harmony_environment}\n"
-                f"Workflow run: {run_url}\n"
-                f"You can add the tag to the desired image version by running:\n"
-                f"  ./script/add-ghcr-tag.sh ghcr.io/{repository_owner}/regression-tests-{suite}:<version> {computed_tag}\n\n"
-              )
-
-              smtp.send_message(msg)
-              sent_count += 1
-              print(f"Sent missing-tag email for suite '{suite}' to: {', '.join(recipients)}")
-
-          print(f'Sent {sent_count} personalized missing-tag email(s)')
-          PY
-
-      - name: Fail when required tag is missing
-        if: steps.validate.outputs.has_missing == 'true'
-        run: |
-          echo "Missing required regression image tag for ${{ github.event.inputs.harmony-environment }}: ${{ steps.validate.outputs.missing_suites }}" >&2
+          if [[ ! -f "$MISSING_FILE" ]]; then
+            echo "Missing file not found: $MISSING_FILE" >&2
+            exit 1
+          fi
+          echo "::error::Validation failed for suite '${{ matrix.suite }}' in $HARMONY_ENVIRONMENT"
+          echo "Missing image tags:"
+          cat "$MISSING_FILE" || true
+          echo "Workflow run: $RUN_URL"
+          echo "You can add the tag to the desired image version by running:"
+          echo "  ./script/add-ghcr-tag.sh ghcr.io/${{ github.repository_owner }}/regression-tests-${{ matrix.suite }}:<version> ${{ steps.validate.outputs.computed_tag }}"
           exit 1
