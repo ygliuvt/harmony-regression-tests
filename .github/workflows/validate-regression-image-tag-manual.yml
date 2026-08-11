@@ -69,6 +69,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.harmony-environment }}
     strategy:
+      fail-fast: false
       matrix:
         suite: ${{ fromJSON(needs.setup.outputs.suites) }}
 
@@ -163,5 +164,5 @@ jobs:
           echo "Missing image tags: ${{ steps.validate.outputs.computed_tag }}"
           echo "Workflow run: $RUN_URL"
           echo "You can add the tag to the desired image version by running:"
-          echo "  ./script/add-ghcr-tag.sh ghcr.io/${{ github.repository_owner }}/regression-tests-${{ matrix.suite }}:<version> ${{ steps.validate.outputs.computed_tag }}"
+          echo "  ./script/add-ghcr-tag.sh ghcr.io/${{ github.repository_owner }}/regression-tests-${{ matrix.suite }}:latest ${{ steps.validate.outputs.computed_tag }}"
           exit 1
