@@ -125,9 +125,6 @@ jobs:
 
           echo "computed_tag=$computed_tag" >> "$GITHUB_OUTPUT"
 
-          missing_file="missing-tag-${{ github.event.inputs.harmony-environment }}-${suite}.txt"
-          : > "$missing_file"
-
           if docker manifest inspect "$image" >/dev/null 2>&1; then
             echo "Found required tag for ${suite}: ${computed_tag}"
             echo "has_missing=false" >> "$GITHUB_OUTPUT"
@@ -135,33 +132,21 @@ jobs:
             echo "missing_suites=none" >> "$GITHUB_OUTPUT"
           else
             echo "Missing required tag for ${suite}: ${computed_tag}"
-            echo "${suite}:${computed_tag}" >> "$missing_file"
+            # record missing suite via outputs; no file written
             echo "has_missing=true" >> "$GITHUB_OUTPUT"
             echo "missing_count=1" >> "$GITHUB_OUTPUT"
             echo "missing_suites=${suite}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Upload missing tag report
-        if: steps.validate.outputs.has_missing == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: missing-regression-image-tag-${{ github.event.inputs.harmony-environment }}-${{ matrix.suite }}
-          path: missing-tag-${{ github.event.inputs.harmony-environment }}-${{ matrix.suite }}.txt
-
       - name: Log missing-tag status and fail step
         if: steps.validate.outputs.has_missing == 'true'
         env:
-          MISSING_FILE: missing-tag-${{ github.event.inputs.harmony-environment }}-${{ matrix.suite }}.txt
           HARMONY_ENVIRONMENT: ${{ github.event.inputs.harmony-environment }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          if [[ ! -f "$MISSING_FILE" ]]; then
-            echo "Missing file not found: $MISSING_FILE" >&2
-            exit 1
-          fi
-          echo "::error::Validation failed for suite '${{ matrix.suite }}' in $HARMONY_ENVIRONMENT"
-          echo "Missing image tags: ${{ steps.validate.outputs.computed_tag }}"
+          echo "Validation failed for suite '${{ matrix.suite }}' in $HARMONY_ENVIRONMENT"
+          echo "Missing image tag: ghcr.io/${{ github.repository_owner }}/regression-tests-${{ matrix.suite }}:${{ steps.validate.outputs.computed_tag }}"
           echo "Workflow run: $RUN_URL"
           echo "You can add the tag to the desired image version by running:"
           echo "  ./script/add-ghcr-tag.sh ghcr.io/${{ github.repository_owner }}/regression-tests-${{ matrix.suite }}:latest ${{ steps.validate.outputs.computed_tag }}"
