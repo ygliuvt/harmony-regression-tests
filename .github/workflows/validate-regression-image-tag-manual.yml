@@ -53,8 +53,12 @@ jobs:
         run: |
           SELECTED="${{ github.event.inputs.test-suite }}"
           if [ "$SELECTED" = "all" ]; then
-            WORKFLOW_FILE=".github/workflows/$(basename "${GITHUB_WORKFLOW_REF%%@*}")"
-            SUITES=$(yq e '.on.workflow_dispatch.inputs.test-suite.options | del(.[] | select(. == "all")) | tojson -c' "$WORKFLOW_FILE")
+            # Extract only the filename from the workflow reference (e.g., validate.yml)
+            WORKFLOW_FILENAME=$(basename "${GITHUB_WORKFLOW_REF%%@*}")
+            WORKFLOW_FILE=".github/workflows/$WORKFLOW_FILENAME"
+
+            # Use modern yq syntax to output single-line JSON array
+            SUITES=$(yq eval '.on.workflow_dispatch.inputs.test-suite.options | del(.[] | select(. == "all"))' "$WORKFLOW_FILE" -o=json -I=0)
             echo "suites=$SUITES" >> "$GITHUB_OUTPUT"
           else
             echo "suites=[\"$SELECTED\"]" >> "$GITHUB_OUTPUT"
@@ -155,9 +159,9 @@ jobs:
             echo "Missing file not found: $MISSING_FILE" >&2
             exit 1
           fi
-          echo "Missing image tags: $MISSING_FILE"
+          echo "::error::Validation failed for suite '${{ matrix.suite }}' in $HARMONY_ENVIRONMENT"
+          echo "Missing image tags: ${{ steps.validate.outputs.computed_tag }}"
           echo "Workflow run: $RUN_URL"
           echo "You can add the tag to the desired image version by running:"
           echo "  ./script/add-ghcr-tag.sh ghcr.io/${{ github.repository_owner }}/regression-tests-${{ matrix.suite }}:<version> ${{ steps.validate.outputs.computed_tag }}"
-          echo "::error::Validation failed for suite '${{ matrix.suite }}' in $HARMONY_ENVIRONMENT"
           exit 1
