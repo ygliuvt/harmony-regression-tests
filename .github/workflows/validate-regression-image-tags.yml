@@ -15,9 +15,8 @@ name: Validate regression image tags
 run-name: Validate regression image tags
 
 on:
-  push:
-    branches:
-      - harmony-2392
+  schedule:
+    - cron: '0 13 * * *'
   workflow_dispatch:
 
 jobs:
@@ -209,16 +208,9 @@ jobs:
                 f"  ./script/add-ghcr-tag.sh ghcr.io/{repository_owner}/regression-tests-{suite}:<version> {computed_tag}\n\n"
               )
 
-              # smtp.send_message(msg)
-              # sent_count += 1
-              # print(f"Sent missing-tag email for suite '{suite}' to: {', '.join(recipients)}")
-
-              # For testing: print the email content instead of sending it
-              print('--- EMAIL MESSAGE START ---')
-              print(msg.as_string())
-              print('--- EMAIL MESSAGE END ---')
+              smtp.send_message(msg)
               sent_count += 1
-              print(f"(TEST) Prepared missing-tag email for suite '{suite}' to: {', '.join(recipients)}")
+              print(f"Sent missing-tag email for suite '{suite}' to: {', '.join(recipients)}")
 
           print(f'Sent {sent_count} personalized missing-tag email(s)')
           PY
