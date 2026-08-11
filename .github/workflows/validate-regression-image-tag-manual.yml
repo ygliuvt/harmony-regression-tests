@@ -16,6 +16,7 @@ on:
         required: true
         type: choice
         options:
+          - all
           - casper
           - geoloco
           - giovanni-averaging-service
@@ -42,9 +43,12 @@ on:
           - variable-subsetter
 
 jobs:
-  validate-single:
+  validate:
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.harmony-environment }}
+    strategy:
+      matrix:
+        suite: ${{ fromJson(github.event.inputs.test-suite == 'all' ? '["casper","geoloco","giovanni-averaging-service","giovanni-time-series-adapter","hga","harmony","harmony-flow","harmony-regression","hoss","hybig","imagenator","net2cog","nisar-py","nsidc-icesat2","nsidc-smap","opera-rtc-s1-browse","podaac-l2-subsetter","regridder","sambah","smap-l2-gridder","subset-band-name","swath-projector","trajectory-subsetter","variable-subsetter"]' : concat('["', github.event.inputs.test-suite, '"]')) }}
 
     steps:
       - name: Checkout the repository
@@ -78,9 +82,9 @@ jobs:
               ;;
           esac
 
-          suite="${{ github.event.inputs.test-suite }}"
+          suite="${{ matrix.suite }}"
           if [[ -z "$suite" ]]; then
-            echo "test-suite input is required" >&2
+            echo "suite is required" >&2
             exit 1
           fi
 
@@ -116,8 +120,8 @@ jobs:
         if: always() && steps.validate.outputs.has_missing == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: missing-regression-image-tag-${{ github.event.inputs.harmony-environment }}-${{ github.event.inputs.test-suite }}
-          path: missing-tag-${{ github.event.inputs.harmony-environment }}-${{ github.event.inputs.test-suite }}.txt
+          name: missing-regression-image-tag-${{ github.event.inputs.harmony-environment }}-${{ matrix.suite }}
+          path: missing-tag-${{ github.event.inputs.harmony-environment }}-${{ matrix.suite }}.txt
 
       - name: Send missing-tag email to service provider
         if: steps.validate.outputs.has_missing == 'true'
@@ -130,7 +134,7 @@ jobs:
           REPOSITORY_OWNER: ${{ github.repository_owner }}
           HARMONY_ENVIRONMENT: ${{ github.event.inputs.harmony-environment }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          MISSING_FILE: missing-tag-${{ github.event.inputs.harmony-environment }}-${{ github.event.inputs.test-suite }}.txt
+          MISSING_FILE: missing-tag-${{ github.event.inputs.harmony-environment }}-${{ matrix.suite }}.txt
         run: |
           set -euo pipefail
 
