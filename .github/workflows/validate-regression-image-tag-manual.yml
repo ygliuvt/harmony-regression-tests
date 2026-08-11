@@ -48,7 +48,7 @@ jobs:
     environment: ${{ github.event.inputs.harmony-environment }}
     strategy:
       matrix:
-        suite: ${{ fromJson(github.event.inputs.test-suite == 'all' ? '["casper","geoloco","giovanni-averaging-service","giovanni-time-series-adapter","hga","harmony","harmony-flow","harmony-regression","hoss","hybig","imagenator","net2cog","nisar-py","nsidc-icesat2","nsidc-smap","opera-rtc-s1-browse","podaac-l2-subsetter","regridder","sambah","smap-l2-gridder","subset-band-name","swath-projector","trajectory-subsetter","variable-subsetter"]' : concat('["', github.event.inputs.test-suite, '"]')) }}
+        suite: ${{ github.event.inputs.test-suite == 'all' && fromJSON('["casper","geoloco","giovanni-averaging-service","giovanni-time-series-adapter","hga","harmony","harmony-flow","harmony-regression","hoss","hybig","imagenator","net2cog","nisar-py","nsidc-icesat2","nsidc-smap","opera-rtc-s1-browse","podaac-l2-subsetter","regridder","sambah","smap-l2-gridder","subset-band-name","swath-projector","trajectory-subsetter","variable-subsetter"]') || fromJSON(format('["{0}"]', github.event.inputs.test-suite)) }}
 
     steps:
       - name: Checkout the repository
